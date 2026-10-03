@@ -56,6 +56,14 @@ selected. It targets Valhall CSF GPUs: Mali-G610/G615/G710/G715/G720. Upstream n
 
 ## Known gaps
 
+- **The Steam client is not usable yet on Mali.** It reaches the Big Picture library, then its
+  interface (CEF on ANGLE on GL on Zink on PanVK) either balloons to gigabytes and is killed on
+  the first touch-driven animation (Valve's `LIBGL_KOPPER_DISABLE=true` path), or, with Kopper
+  kept, never presents because a fragment-queue sync wait hangs (`DEVICE LOST`). Both are in the
+  driver; details and reproductions in [panvk-kbase-upstream-report.md](panvk-kbase-upstream-report.md).
+  Software CEF and `XWAYLAND_NO_GLAMOR=1` were tried: Big Picture then restarts its interface in a
+  loop.
+
 - No glibc Mali driver ships with the app or the runtime, and none is offered by the release
   checker; it has to be built with the script above and imported.
 - Whether the system Mali driver exposes `VK_EXT_image_drm_format_modifier` depends on the DDK
