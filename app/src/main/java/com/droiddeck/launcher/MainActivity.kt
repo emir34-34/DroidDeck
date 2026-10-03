@@ -105,6 +105,8 @@ class MainActivity : ComponentActivity() {
     private var lossless by mutableStateOf(Lossless.State.NONE)
     private var showRemove by mutableStateOf(false)
     private var showNonAdreno by mutableStateOf<LinuxRuntimeInstaller.Release?>(null)
+    /** A Mali with no Linux runtime driver: a session would end at once, so it is said before the start. */
+    private var showMaliNoDriver by mutableStateOf(false)
     private var glThread by mutableStateOf(true)
     private var noGlError by mutableStateOf(true)
     private var steamDeckMode by mutableStateOf(false)
@@ -687,6 +689,15 @@ class MainActivity : ComponentActivity() {
                     },
                     onClear = { SessionPrefs.setRomsDir(this, ""); romsDir = null; showRoms = false },
                     onDismiss = { showRoms = false },
+                )
+                if (showMaliNoDriver) ConfirmDialog(
+                    title = "Mali GPU: Linux driver needed",
+                    text = "The runtime's own driver (Turnip) only runs on Adreno, so Steam cannot start on " +
+                        "${com.droiddeck.launcher.gpu.GpuInfo.detect().name} yet. Import a glibc Mali Vulkan driver " +
+                        "(PanVK for kbase) under GPU drivers \u2192 Linux runtime driver and select it, then start again.",
+                    confirm = "GPU drivers",
+                    onConfirm = { showMaliNoDriver = false; openComponents(focusContent = true, tab = com.droiddeck.launcher.ui.GPU_TAB) },
+                    onDismiss = { showMaliNoDriver = false },
                 )
                 showNonAdreno?.let { release ->
                     val mali = com.droiddeck.launcher.core.DeviceSupport.mali()
@@ -1407,6 +1418,11 @@ class MainActivity : ComponentActivity() {
         }
         val warn = installed == null && !com.droiddeck.launcher.core.DeviceSupport.adreno()
         if (warn && available != null) { showNonAdreno = available; return false }
+        if (installed != null && com.droiddeck.launcher.core.DeviceSupport.mali() &&
+            com.droiddeck.launcher.gpu.LinuxVulkanDriver.resolveIcdPath(this, SessionPrefs.linuxDriver(this)) == null) {
+            showMaliNoDriver = true
+            return false
+        }
         startActivity(intent)
         return true
     }

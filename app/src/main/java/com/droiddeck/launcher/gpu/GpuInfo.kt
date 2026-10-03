@@ -77,17 +77,57 @@ data class GpuInfo(
 
         /**
          * A Mali: kbase's gpuinfo names it ("Mali-G710 10 cores r0p0 0xA862"), where the kernel lets
-         * the app read it; otherwise the SoC stands in. model is the number after the G ("710").
+         * the app read it - most retail kernels do not - else the GL driver's renderer string
+         * ("Mali-G720 MC8"); otherwise the SoC stands in. model is the number after the G ("720").
          */
         private fun detectMali(soc: String): GpuInfo {
             val raw = listOf("/sys/class/misc/mali0/device/gpuinfo", "/sys/devices/platform/mali/gpuinfo")
                 .firstNotNullOfOrNull { FileUtils.readString(File(it))?.trim()?.takeIf(String::isNotEmpty) }
-            val name = raw?.let { Regex("""Mali-[A-Z]?\d+""").find(it)?.value }
+            val name = (raw ?: glRenderer())?.let { Regex("""Mali-[A-Z]?\d+( MC\d+)?""").find(it)?.value }
             val model = name?.let { Regex("""(\d+)""").find(it)?.value?.toIntOrNull() } ?: 0
             return GpuInfo(
                 name = name ?: "Mali (${soc.ifEmpty { Build.HARDWARE.ifBlank { "unknown SoC" } }})",
                 model = model, family = Family.MALI, soc = soc, oneUi8Gen2 = false,
             )
+        }
+
+        @Volatile private var renderer: String? = null
+        @Volatile private var rendererRead = false
+
+        /**
+         * GL_RENDERER from a throwaway 1x1 pbuffer context, once per process: the one name for the
+         * GPU an app may always read. Null when EGL refuses.
+         */
+        @Synchronized
+        private fun glRenderer(): String? {
+            if (rendererRead) return renderer
+            rendererRead = true
+            renderer = runCatching {
+                val display = android.opengl.EGL14.eglGetDisplay(android.opengl.EGL14.EGL_DEFAULT_DISPLAY)
+                val version = IntArray(2)
+                if (!android.opengl.EGL14.eglInitialize(display, version, 0, version, 1)) return@runCatching null
+                val configs = arrayOfNulls<android.opengl.EGLConfig>(1)
+                val count = IntArray(1)
+                android.opengl.EGL14.eglChooseConfig(display, intArrayOf(
+                    android.opengl.EGL14.EGL_RENDERABLE_TYPE, android.opengl.EGL14.EGL_OPENGL_ES2_BIT,
+                    android.opengl.EGL14.EGL_SURFACE_TYPE, android.opengl.EGL14.EGL_PBUFFER_BIT,
+                    android.opengl.EGL14.EGL_NONE), 0, configs, 0, 1, count, 0)
+                val config = configs[0] ?: return@runCatching null
+                val context = android.opengl.EGL14.eglCreateContext(display, config, android.opengl.EGL14.EGL_NO_CONTEXT,
+                    intArrayOf(android.opengl.EGL14.EGL_CONTEXT_CLIENT_VERSION, 2, android.opengl.EGL14.EGL_NONE), 0)
+                val surface = android.opengl.EGL14.eglCreatePbufferSurface(display, config,
+                    intArrayOf(android.opengl.EGL14.EGL_WIDTH, 1, android.opengl.EGL14.EGL_HEIGHT, 1, android.opengl.EGL14.EGL_NONE), 0)
+                try {
+                    if (!android.opengl.EGL14.eglMakeCurrent(display, surface, surface, context)) null
+                    else android.opengl.GLES20.glGetString(android.opengl.GLES20.GL_RENDERER)
+                } finally {
+                    android.opengl.EGL14.eglMakeCurrent(display, android.opengl.EGL14.EGL_NO_SURFACE,
+                        android.opengl.EGL14.EGL_NO_SURFACE, android.opengl.EGL14.EGL_NO_CONTEXT)
+                    android.opengl.EGL14.eglDestroySurface(display, surface)
+                    android.opengl.EGL14.eglDestroyContext(display, context)
+                }
+            }.getOrNull()
+            return renderer
         }
 
         internal fun familyOf(adreno: Boolean, model: Int): Family = when {

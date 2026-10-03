@@ -1104,11 +1104,15 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
      * lines - which is proot's seccomp acceleration failing an x86 helper (Steam's xalia under
      * FEX) on some devices (a Fold 5, twice). The switch that answers it is in Performance, and a
      * user who never opens the log would not know.
+     *
+     * And on a Mali (MediaTek): gamescope finding no Vulkan device, which is the runtime's Turnip
+     * refusing a GPU that is not an Adreno - the session needs an imported Mali driver first.
      */
     private fun sessionEndHint(log: File?): String? {
         if (log == null || !log.isFile) return null
         return try {
             var enosys = 0
+            var noGpu = false
             // The tail is where a dying session says why; 512 KB covers the storm without reading a 1 GB log.
             val size = log.length()
             java.io.RandomAccessFile(log, "r").use { f ->
@@ -1118,9 +1122,16 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
                 f.readFully(bytes)
                 String(bytes, Charsets.ISO_8859_1).lineSequence().forEach { line ->
                     if (line.contains("Function not implemented")) enosys++
+                    if (line.contains("failed to find physical device") || line.contains("VK_ERROR_INCOMPATIBLE_DRIVER")) noGpu = true
                 }
             }
-            if (enosys >= 8) {
+            if (noGpu && com.droiddeck.launcher.core.DeviceSupport.mali()) {
+                if (com.droiddeck.launcher.gpu.LinuxVulkanDriver.resolveIcdPath(this, SessionPrefs.linuxDriver(this)) == null)
+                    "This Mali GPU has no Linux driver yet: the runtime's own driver (Turnip) only runs on Adreno. " +
+                        "Import a glibc Mali Vulkan driver (PanVK for kbase) under GPU drivers \u2192 Linux runtime driver, then start again."
+                else
+                    "The imported Linux runtime driver found no usable GPU on this Mali. Try another build, or share the logs."
+            } else if (enosys >= 8) {
                 "The log shows $enosys \"Function not implemented\" errors: proot's seccomp acceleration is failing a helper on this device. " +
                     "Try Performance \u2192 \"Run proot without seccomp\" (or \"Skip Steam's xalia helper\") and start again."
             } else null
