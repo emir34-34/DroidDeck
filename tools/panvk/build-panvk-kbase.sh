@@ -2,9 +2,11 @@
 # Builds a glibc (Linux runtime) PanVK for Mali GPUs on Android's kbase kernel driver, packed as a
 # zip the app imports under GPU drivers > Linux runtime driver (LinuxVulkanDriverManager).
 #
-# The kbase/CSF backend is the community's (wonderkast02/panvk-g720-kbase-csf, with mcghjbcg's
-# multi-GPU fixes); their releases are bionic builds for Winlator, which the runtime's glibc
-# programs cannot load. This builds the same source for aarch64 glibc, cross-compiled on an x86_64
+# The kbase/CSF backend is the community's (wonderkast02/panvk-g720-kbase-csf); its releases are
+# bionic builds for Winlator, which the runtime's glibc programs cannot load. mcghjbcg's multi-GPU
+# fork (851a474) was tried first and is NOT used: on a Mali-G720 (MT6899) its fragment subqueue
+# hangs on the vertex/tiler sync wait after ~50 presented frames - gamescope and Steam's update UI
+# froze - while this branch ran vkcube and the Steam client without a single queue timeout. This builds the same source for aarch64 glibc, cross-compiled on an x86_64
 # Linux host without root and without touching the host's packages:
 #   - host LLVM 22 / clang / libclc / SPIRV-LLVM-Translator from the Arch archive, unpacked into a
 #     private prefix, to build Mesa's host tools (mesa_clc, vtn_bindgen2, panfrost_compile);
@@ -20,9 +22,9 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 W=$(realpath -m "${1:-$HOME/panvk-work}")
 NDK=${ANDROID_NDK_HOME:-$HOME/Android/Sdk/ndk/27.3.13750724}
 NDKBIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin
-SRC_REPO=https://github.com/mcghjbcg/panvk-Android.git
-SRC_BRANCH="G720,G715,G710,G615,G610-fix"
-SRC_COMMIT=851a4743a95b29e94816e9a9e796f55930d5124e
+SRC_REPO=https://github.com/wonderkast02/panvk-g720-kbase-csf.git
+SRC_BRANCH=g720-development
+SRC_COMMIT=ca163891e8d3367c4b65ecaf7dcb7452545f4172
 ARCH_ARCHIVE=https://archive.archlinux.org/packages
 ALARM=http://de3.mirror.archlinuxarm.org/aarch64
 HOST_PKGS=(l/llvm/llvm-22.1.8-2-x86_64 l/llvm-libs/llvm-libs-22.1.8-2-x86_64 c/clang/clang-22.1.8-1-x86_64
@@ -61,7 +63,8 @@ for p in "${TARGET_PKGS[@]}"; do
 done
 
 # Source, pinned, with DroidDeck's patches.
-if [ ! -d src/.git ]; then
+if [ "$(git -C src remote get-url origin 2>/dev/null)" != "$SRC_REPO" ]; then
+  rm -rf src
   git clone -q --branch "$SRC_BRANCH" "$SRC_REPO" src
 fi
 git -C src checkout -q -f "$SRC_COMMIT"

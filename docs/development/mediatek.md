@@ -38,11 +38,17 @@ A DroidDeck session uses two Vulkan drivers (see `gpu/TurnipDriver.java` and
 A glibc, AArch64 Mesa build of PanVK that talks to Android's **kbase** kernel interface (mainline
 PanVK expects the panfrost/panthor DRM driver, which Android kernels do not have).
 `tools/panvk/build-panvk-kbase.sh` builds one: the community kbase/CSF backend
-([wonderkast02/panvk-g720-kbase-csf](https://github.com/wonderkast02/panvk-g720-kbase-csf), with
-[mcghjbcg's multi-GPU fixes](https://github.com/mcghjbcg/panvk-Android)) cross-compiled for the
-runtime's Arch Linux ARM glibc, plus `tools/panvk/patches` (the kbase node's device number reported
-as the DRM render device, which is how the runtime presents `/dev/mali0`). Their own releases are
-bionic builds for Winlator and are refused by the import.
+([wonderkast02/panvk-g720-kbase-csf](https://github.com/wonderkast02/panvk-g720-kbase-csf),
+`g720-development`) cross-compiled for the runtime's Arch Linux ARM glibc, plus
+`tools/panvk/patches` (the kbase node's device number reported as the DRM render and primary
+device, which is how the runtime presents `/dev/mali0` and what gamescope's nested backend needs).
+Their own releases are bionic builds for Winlator and are refused by the import.
+
+Verified on a POCO X8 Pro (MT6899, Mali-G720 MC8, Android 16): gamescope, Xwayland and the Steam
+client (Big Picture sign-in) run on it with no GPU queue timeouts. The
+[mcghjbcg multi-GPU fork](https://github.com/mcghjbcg/panvk-Android) (851a474) hangs there: its
+fragment subqueue waits forever on the vertex/tiler sync object after ~50 presented frames
+(`kbase: timeout on subqueue`), which froze Steam's update window and gamescope.
 
 Import the zip under GPU drivers > Linux runtime driver; on a Mali the first one imported is
 selected. It targets Valhall CSF GPUs: Mali-G610/G615/G710/G715/G720. Upstream notes that vkd3d
