@@ -1113,6 +1113,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
         return try {
             var enosys = 0
             var noGpu = false
+            var turnipRan = false
             // The tail is where a dying session says why; 512 KB covers the storm without reading a 1 GB log.
             val size = log.length()
             java.io.RandomAccessFile(log, "r").use { f ->
@@ -1123,12 +1124,16 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
                 String(bytes, Charsets.ISO_8859_1).lineSequence().forEach { line ->
                     if (line.contains("Function not implemented")) enosys++
                     if (line.contains("failed to find physical device") || line.contains("VK_ERROR_INCOMPATIBLE_DRIVER")) noGpu = true
+                    if (line.startsWith("TU: ")) turnipRan = true
                 }
             }
             if (noGpu && com.droiddeck.launcher.core.DeviceSupport.mali()) {
                 if (com.droiddeck.launcher.gpu.LinuxVulkanDriver.resolveIcdPath(this, SessionPrefs.linuxDriver(this)) == null)
                     "This Mali GPU has no Linux driver yet: the runtime's own driver (Turnip) only runs on Adreno. " +
                         "Import a glibc Mali Vulkan driver (PanVK for kbase) under GPU drivers \u2192 Linux runtime driver, then start again."
+                else if (turnipRan)
+                    "The session still ran the runtime's Turnip, not the imported Mali driver: the runtime's session script " +
+                        "did not take the driver. Share the logs."
                 else
                     "The imported Linux runtime driver found no usable GPU on this Mali. Try another build, or share the logs."
             } else if (enosys >= 8) {
