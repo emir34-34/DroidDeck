@@ -35,19 +35,23 @@ A DroidDeck session uses two Vulkan drivers (see `gpu/TurnipDriver.java` and
 
 ## What a Mali user needs
 
-1. A glibc, AArch64 Mesa build of PanVK that talks to Android's **kbase** kernel interface (mainline
-   PanVK expects the panfrost/panthor DRM driver, which Android kernels do not have). Package it as
-   a zip holding `libvulkan_panfrost.so` (and optionally a `meta.json` with `name`,
-   `driverVersion`, `minGlibc`).
-2. GPU drivers > Linux runtime driver > import the zip, and select it.
+A glibc, AArch64 Mesa build of PanVK that talks to Android's **kbase** kernel interface (mainline
+PanVK expects the panfrost/panthor DRM driver, which Android kernels do not have).
+`tools/panvk/build-panvk-kbase.sh` builds one: the community kbase/CSF backend
+([wonderkast02/panvk-g720-kbase-csf](https://github.com/wonderkast02/panvk-g720-kbase-csf), with
+[mcghjbcg's multi-GPU fixes](https://github.com/mcghjbcg/panvk-Android)) cross-compiled for the
+runtime's Arch Linux ARM glibc, plus `tools/panvk/patches` (the kbase node's device number reported
+as the DRM render device, which is how the runtime presents `/dev/mali0`). Their own releases are
+bionic builds for Winlator and are refused by the import.
 
-Valhall (Mali-G57/G68/G77/G78/G710/G715/G720, Immortalis) is what current PanVK targets; Bifrost
-and older are unlikely to run DXVK.
+Import the zip under GPU drivers > Linux runtime driver; on a Mali the first one imported is
+selected. It targets Valhall CSF GPUs: Mali-G610/G615/G710/G715/G720. Upstream notes that vkd3d
+(DX12) is not supported and some DXVK games can hang the GPU.
 
 ## Known gaps
 
 - No glibc Mali driver ships with the app or the runtime, and none is offered by the release
-  checker; it has to be imported.
+  checker; it has to be built with the script above and imported.
 - Whether the system Mali driver exposes `VK_EXT_image_drm_format_modifier` depends on the DDK
   version; the compositor's log (`present: driver MISSING ...`) says which it lacks.
 - GPU load for the overlay is not read on Mali yet; the clock-pin option is KGSL-only.

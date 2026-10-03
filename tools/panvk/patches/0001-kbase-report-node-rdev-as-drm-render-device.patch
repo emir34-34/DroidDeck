@@ -1,0 +1,34 @@
+diff --git a/src/panfrost/vulkan/panvk_physical_device.c b/src/panfrost/vulkan/panvk_physical_device.c
+index ebcc328..5ee4038 100644
+--- a/src/panfrost/vulkan/panvk_physical_device.c
++++ b/src/panfrost/vulkan/panvk_physical_device.c
+@@ -23,6 +23,7 @@
+ #include <sys/ioctl.h>
+ #include <linux/sync_file.h>
+ 
++#include "util/detect_os.h"
+ #include "util/disk_cache.h"
+ #include "util/cnd_monotonic.h"
+ #include "util/os_misc.h"
+@@ -1342,7 +1343,20 @@ panvk_physical_device_init_kbase(struct panvk_physical_device *device,
+    }
+ 
+    /* kbase does not expose DRM nodes, so drm.{render,primary}_rdev are left
+-    * zeroed; WSI paths that compare rdev values will simply not match. */
++    * zeroed; WSI paths that compare rdev values will simply not match.
++    *
++    * Except on a glibc (DroidDeck) build: the Linux runtime presents the kbase
++    * node itself as its DRM render node (/dev/dri/renderD<minor> bound to
++    * /dev/mali0), so the kbase node's own device number IS the render node's.
++    * Reporting it lets gamescope and the dma-buf feedback match this device
++    * to the compositor's main device. */
++#if !DETECT_OS_ANDROID
++   {
++      struct stat st;
++      if (stat(path, &st) == 0 && S_ISCHR(st.st_mode))
++         device->drm.render_rdev = st.st_rdev;
++   }
++#endif
+ 
+    device->formats.all = pan_format_table(arch);
+    device->formats.blendable = pan_blendable_format_table(arch);

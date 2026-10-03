@@ -288,16 +288,17 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
         val name = activity.displayNameOf(uri)
         Thread({
             var bundle: DriverBundle.Bundle? = null
+            var linuxId: String? = null
             val problem = try {
                 when {
                     DriverBundle.isBundle(activity, uri) -> bundle = DriverBundle.install(activity, uri)
-                    linux == true -> LinuxVulkanDriverManager(activity).installDriver(uri, name)
+                    linux == true -> linuxId = LinuxVulkanDriverManager(activity).installDriver(uri, name)
                     linux == false -> TurnipDriver(activity).installFromZip(uri, name)
                     else -> try {
                         TurnipDriver(activity).installFromZip(uri, name)
                     } catch (display: IllegalArgumentException) {
                         try {
-                            LinuxVulkanDriverManager(activity).installDriver(uri, name)
+                            linuxId = LinuxVulkanDriverManager(activity).installDriver(uri, name)
                         } catch (runtime: IllegalArgumentException) {
                             throw IllegalArgumentException("Not a driver zip: neither an AdrenoTools driver, a -Linux Turnip nor an Android + Linux bundle")
                         }
@@ -311,7 +312,16 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
                 "Import failed: ${e.message}"
             }
             ui.post {
-                val done = bundle?.let { useBundle(it) } ?: "Imported ${name ?: "driver"}"
+                // A Mali has no runtime driver of its own: the first one imported is the one to
+                // draw with, without a second trip to the drop-down.
+                val maliPick = linuxId != null && gpu.family == GpuInfo.Family.MALI &&
+                    LinuxVulkanDriver.resolveIcdPath(activity, SessionPrefs.linuxDriver(activity)) == null
+                if (maliPick) {
+                    SessionPrefs.setLinuxDriver(activity, linuxId!!)
+                    setMode(false)
+                }
+                val done = bundle?.let { useBundle(it) }
+                    ?: ("Imported ${name ?: "driver"}" + if (maliPick) " and set it as the Linux runtime driver" else "")
                 android.widget.Toast.makeText(
                     activity, problem ?: done,
                     if (problem != null || bundle != null) android.widget.Toast.LENGTH_LONG else android.widget.Toast.LENGTH_SHORT,
