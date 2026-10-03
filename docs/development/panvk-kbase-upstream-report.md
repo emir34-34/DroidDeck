@@ -1,6 +1,6 @@
 # PanVK kbase/CSF on Mali-G720 (MT6899): two bugs under Zink
 
-Draft report for [wonderkast02/panvk-g720-kbase-csf](https://github.com/wonderkast02/panvk-g720-kbase-csf).
+Filed as [wonderkast02/panvk-g720-kbase-csf#9](https://github.com/wonderkast02/panvk-g720-kbase-csf/issues/9).
 
 ## Setup
 
@@ -12,7 +12,8 @@ Draft report for [wonderkast02/panvk-g720-kbase-csf](https://github.com/wonderka
   the kbase node's `st_rdev` as `drm.render_rdev` and `drm.primary_rdev` on non-Android builds.
   Build script: DroidDeck `tools/panvk/build-panvk-kbase.sh`.
 - Environment: DroidDeck (Steam client under gamescope's nested Wayland backend, inside proot).
-  The bugs reproduce outside proot too (run directly with the runtime's `ld-linux`).
+  Bug 1 with the multi-GPU fork also reproduced outside proot (`vkcube` run directly with the
+  runtime's `ld-linux`); everything else below was observed inside proot.
 
 ## What works
 
