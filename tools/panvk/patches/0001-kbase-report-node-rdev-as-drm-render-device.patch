@@ -1,5 +1,5 @@
 diff --git a/src/panfrost/vulkan/panvk_physical_device.c b/src/panfrost/vulkan/panvk_physical_device.c
-index ebcc328..5ee4038 100644
+index ebcc328..6c5deb2 100644
 --- a/src/panfrost/vulkan/panvk_physical_device.c
 +++ b/src/panfrost/vulkan/panvk_physical_device.c
 @@ -23,6 +23,7 @@
@@ -10,7 +10,7 @@ index ebcc328..5ee4038 100644
  #include "util/disk_cache.h"
  #include "util/cnd_monotonic.h"
  #include "util/os_misc.h"
-@@ -1342,7 +1343,20 @@ panvk_physical_device_init_kbase(struct panvk_physical_device *device,
+@@ -1342,7 +1343,24 @@ panvk_physical_device_init_kbase(struct panvk_physical_device *device,
     }
  
     /* kbase does not expose DRM nodes, so drm.{render,primary}_rdev are left
@@ -21,12 +21,16 @@ index ebcc328..5ee4038 100644
 +    * node itself as its DRM render node (/dev/dri/renderD<minor> bound to
 +    * /dev/mali0), so the kbase node's own device number IS the render node's.
 +    * Reporting it lets gamescope and the dma-buf feedback match this device
-+    * to the compositor's main device. */
++    * to the compositor's main device. It stands for the primary node too:
++    * gamescope's nested (Wayland) backend refuses a device without one, and
++    * the runtime has no KMS node to offer in its place. */
 +#if !DETECT_OS_ANDROID
 +   {
 +      struct stat st;
-+      if (stat(path, &st) == 0 && S_ISCHR(st.st_mode))
++      if (stat(path, &st) == 0 && S_ISCHR(st.st_mode)) {
 +         device->drm.render_rdev = st.st_rdev;
++         device->drm.primary_rdev = st.st_rdev;
++      }
 +   }
 +#endif
  
