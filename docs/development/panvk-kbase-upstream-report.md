@@ -55,3 +55,18 @@ GL on Zink on PanVK) presents through the DRI3 loader path:
   `/dev/mali0` fds and ~47 dma-buf fds; Android's lmkd then kills it (or the whole app).
 - Plain `vkAllocateMemory`/`vkMapMemory`/`vkFreeMemory` churn (200 x 4 MB per memory type) and
   instance/device create/destroy loops do not leak: RSS and fd counts stay flat.
+
+## Follow-up: root cause and fix for bug 1 (and the memory growth of bug 2)
+
+With progress breadcrumbs tagged `pass << 16 | step` (DroidDeck patch 0003, `PANVK_KBASE_PROGRESS=1`)
+the Steam/CEF hang reads: VT subqueue at render pass 226 of the command buffer, between `RUN_IDVS`
+and `FINISH_TILING`; fragment subqueue done with pass 154. The VT subqueue ran ~70 passes ahead,
+the tiler heap (no chunk recycling within a generation on kbase) ran out, and the fragment subqueue
+could not catch up because the VT pass signals it waits on are deferred on iterator scoreboards
+also holding the stuck pass. Zink then could not recycle anything, hence the memory growth.
+
+Bounding the lead fixes it: at the end of VT pass N, wait for the fragment job of pass N-8 (recorded
+per pass, since barriers also advance the fragment sync point). Separately, the compute barrier,
+event set/reset and query availability syncs were switched from `MALI_CS_SYNC_SCOPE_CSG` to the
+command buffer's scope (SYSTEM on kbase), since each subqueue is its own CSG. Patches:
+`tools/panvk/patches/0002-*` and `0003-*` in the DroidDeck fork.

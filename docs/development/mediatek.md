@@ -56,14 +56,18 @@ selected. It targets Valhall CSF GPUs: Mali-G610/G615/G710/G715/G720. Upstream n
 
 ## Known gaps
 
-- **The Steam client is not usable yet on Mali.** It reaches the Big Picture library, then its
-  interface (CEF on ANGLE on GL on Zink on PanVK) either balloons to gigabytes and is killed on
-  the first touch-driven animation (Valve's `LIBGL_KOPPER_DISABLE=true` path), or, with Kopper
-  kept, never presents because a fragment-queue sync wait hangs (`DEVICE LOST`). Both are in the
-  driver; details and reproductions in [panvk-kbase-upstream-report.md](panvk-kbase-upstream-report.md).
-  Software CEF and `XWAYLAND_NO_GLAMOR=1` were tried: Big Picture then restarts its interface in a
-  loop.
-
+- **Fixed in `tools/panvk/patches` (0002, 0003): the Steam client's interface hung and ballooned.**
+  CEF on ANGLE on GL on Zink records hundreds of render passes per command buffer. On kbase the
+  tiler heap is not recycled inside a heap generation, so the vertex/tiler subqueue running ~70
+  passes ahead of the fragment subqueue ran the heap out mid-pass, and the fragment subqueue could
+  not catch up (the pass signals it waits on are deferred on iterator scoreboards shared with the
+  stuck pass): a deadlock, after which Zink could not recycle buffers and grew to gigabytes until
+  lmkd killed it. 0003 makes the VT subqueue wait, at the end of each pass, for the fragment job of
+  the pass `PANVK_KBASE_VT_LEAD` (default 8) passes back. 0002 signals the compute barrier, events
+  and query availability with the command buffer's sync scope (SYSTEM on kbase, where each subqueue
+  is its own CSG). With both, Big Picture scrolled for minutes with no queue timeout and the CEF
+  GPU process steady at ~0.5 GB. `PANVK_KBASE_PROGRESS=1` turns on the hang breadcrumbs alone
+  (`pass << 16 | step` per subqueue in the timeout dump) without the rest of `kbase_diag`.
 - No glibc Mali driver ships with the app or the runtime, and none is offered by the release
   checker; it has to be built with the script above and imported.
 - Whether the system Mali driver exposes `VK_EXT_image_drm_format_modifier` depends on the DDK
