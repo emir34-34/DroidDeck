@@ -1,6 +1,7 @@
 package com.droiddeck.launcher.gpu
 
 import android.os.Build
+import com.droiddeck.launcher.core.DeviceSupport
 import com.droiddeck.launcher.core.FileUtils
 import java.io.File
 
@@ -29,6 +30,8 @@ data class GpuInfo(
         A6XX("Adreno 6xx"),
         /** An Adreno whose model KGSL does not give: treated as the newest family it could be. */
         ADRENO_UNKNOWN("Adreno"),
+        /** Arm Mali (MediaTek Dimensity/Helio and others): experimental, no Turnip runs on it. */
+        MALI("Arm Mali"),
         NOT_ADRENO("Not an Adreno GPU"),
     }
 
@@ -37,6 +40,7 @@ data class GpuInfo(
     val support: Support
         get() = when {
             family == Family.NOT_ADRENO -> Support.UNSUPPORTED
+            family == Family.MALI -> Support.UNTESTED
             family == Family.A8XX -> Support.TESTED
             family == Family.A7XX && model >= 725 -> Support.TESTED
             else -> Support.UNTESTED
@@ -46,8 +50,11 @@ data class GpuInfo(
     val supportText: String
         get() = when (support) {
             Support.TESTED -> "Supported"
-            Support.UNTESTED -> if (family == Family.A7XX_LOW) "Experimental: its drivers are test builds"
-                else "Below tested hardware (Adreno 725 and newer): it may not run"
+            Support.UNTESTED -> when (family) {
+                Family.A7XX_LOW -> "Experimental: its drivers are test builds"
+                Family.MALI -> "Experimental: Mali needs an imported Linux runtime driver (PanVK for kbase)"
+                else -> "Below tested hardware (Adreno 725 and newer): it may not run"
+            }
             Support.UNSUPPORTED -> "Not supported: DroidDeck needs an Adreno (Snapdragon) GPU"
         }
 
@@ -58,12 +65,28 @@ data class GpuInfo(
                 .firstNotNullOfOrNull { FileUtils.readString(File(it))?.trim()?.takeIf(String::isNotEmpty) }
             val soc = if (Build.VERSION.SDK_INT >= 31) Build.SOC_MODEL.takeIf { it.isNotBlank() && it != Build.UNKNOWN }.orEmpty() else ""
             val model = raw?.let { Regex("""(\d{3})""").find(it)?.groupValues?.get(1)?.toIntOrNull() } ?: 0
+            if (!adreno && DeviceSupport.mali()) return detectMali(soc)
             val family = familyOf(adreno, model)
             val samsung = Build.MANUFACTURER.equals("samsung", ignoreCase = true)
             return GpuInfo(
                 name = if (!adreno) Build.HARDWARE.ifBlank { "this GPU" } else if (model > 0) "Adreno $model" else "Adreno",
                 model = model, family = family, soc = soc,
                 oneUi8Gen2 = samsung && model == 740,
+            )
+        }
+
+        /**
+         * A Mali: kbase's gpuinfo names it ("Mali-G710 10 cores r0p0 0xA862"), where the kernel lets
+         * the app read it; otherwise the SoC stands in. model is the number after the G ("710").
+         */
+        private fun detectMali(soc: String): GpuInfo {
+            val raw = listOf("/sys/class/misc/mali0/device/gpuinfo", "/sys/devices/platform/mali/gpuinfo")
+                .firstNotNullOfOrNull { FileUtils.readString(File(it))?.trim()?.takeIf(String::isNotEmpty) }
+            val name = raw?.let { Regex("""Mali-[A-Z]?\d+""").find(it)?.value }
+            val model = name?.let { Regex("""(\d+)""").find(it)?.value?.toIntOrNull() } ?: 0
+            return GpuInfo(
+                name = name ?: "Mali (${soc.ifEmpty { Build.HARDWARE.ifBlank { "unknown SoC" } }})",
+                model = model, family = Family.MALI, soc = soc, oneUi8Gen2 = false,
             )
         }
 

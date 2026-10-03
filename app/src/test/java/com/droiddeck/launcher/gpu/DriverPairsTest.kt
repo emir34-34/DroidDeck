@@ -47,6 +47,28 @@ class DriverPairsTest {
     }
 
     @Test
+    fun maliIsExperimentalAndGetsNoTurnipPair() {
+        val mali = GpuInfo("Mali-G710", 710, Family.MALI, "MT6983", false)
+        assertEquals(GpuInfo.Support.UNTESTED, mali.support)
+        assertTrue(mali.supportText.contains("Mali"))
+        assertNull(DriverPairs.recommendedKey(mali, emptyList()))
+        val check = TurnipReleases.Check(listOf(
+            asset("Turnip-r4.zip", "r4", false, DriverPairs.BANNER),
+            asset("Turnip-r4-Linux.zip", "r4", true, DriverPairs.BANNER),
+        ), emptyList(), emptyList(), 0L)
+        assertFalse(DriverPairs.from(check).any { it.suits(mali) })
+    }
+
+    @Test
+    fun linuxDriverLibraryNamesAreMesaIcds() {
+        assertTrue(LinuxVulkanDriverManager.isDriverLibraryName("libvulkan_freedreno.so"))
+        assertTrue(LinuxVulkanDriverManager.isDriverLibraryName("libvulkan_panfrost.so"))
+        assertFalse(LinuxVulkanDriverManager.isDriverLibraryName("libvulkan.so"))
+        assertFalse(LinuxVulkanDriverManager.isDriverLibraryName("../libvulkan_panfrost.so"))
+        assertFalse(LinuxVulkanDriverManager.isDriverLibraryName(null))
+    }
+
+    @Test
     fun pairsMatchHalvesAndNeverMixBannersReleases() {
         val check = TurnipReleases.Check(
             listOf(

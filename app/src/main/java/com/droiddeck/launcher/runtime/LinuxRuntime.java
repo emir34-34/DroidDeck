@@ -34,6 +34,7 @@ public final class LinuxRuntime {
     /** Shortcut extra naming which of the modes above a Linux entry launches. */
     public static final String EXTRA_LINUX_MODE = "linux_mode";
     private static final String KGSL_DEVICE = "/dev/kgsl-3d0";
+    private static final String MALI_DEVICE = com.droiddeck.launcher.core.DeviceSupport.MALI_DEVICE;
     /**
      * Where the guest sees a command's XDG_RUNTIME_DIR. A Unix socket's path must fit in 108 bytes,
      * and libwayland checks the guest's path before proot ever sees it: with the app on an SD card
@@ -267,14 +268,25 @@ public final class LinuxRuntime {
      * linux-dmabuf without one. The KGSL device Turnip actually drives ({@code gpu_device}, which we
      * may open) stands in: it appears as a render node with the sysfs entries libdrm reads, and our
      * Turnip build reports the same device numbers for it.
+     *
+     * <p>On a Mali (MediaTek) GPU the kbase node {@code /dev/mali0} stands in the same way, named
+     * as mainline names a Mali's render node (panfrost), for gamescope and for a PanVK built for
+     * kbase, which opens the kbase node itself.
      */
     private static void bindGpuNode(Context context, List<String> cmd) {
+        String gpuDevice = KGSL_DEVICE;
         StructStat st;
         try {
             st = Os.stat(KGSL_DEVICE);
         } catch (ErrnoException e) {
-            return;
+            try {
+                st = Os.stat(MALI_DEVICE);
+                gpuDevice = MALI_DEVICE;
+            } catch (ErrnoException e2) {
+                return;
+            }
         }
+        boolean mali = MALI_DEVICE.equals(gpuDevice);
         long dev = st.st_rdev;
         long major = ((dev >> 8) & 0xfff) | ((dev >> 32) & ~0xfffL);
         long minor = (dev & 0xff) | ((dev >> 12) & ~0xffL);
@@ -291,23 +303,29 @@ public final class LinuxRuntime {
             Files.write(new File(drm, "dev").toPath(),
                     (major + ":" + minor + "\n").getBytes(StandardCharsets.UTF_8));
             Files.write(new File(device, "uevent").toPath(),
-                    "DRIVER=kgsl-3d0\nMODALIAS=platform:kgsl-3d0\n".getBytes(StandardCharsets.UTF_8));
+                    (mali ? "DRIVER=panfrost\nMODALIAS=platform:mali\n" : "DRIVER=kgsl-3d0\nMODALIAS=platform:kgsl-3d0\n")
+                            .getBytes(StandardCharsets.UTF_8));
             File subsystem = new File(device, "subsystem");
             if (!Files.isSymbolicLink(subsystem.toPath())) {
                 Os.symlink("/sys/bus/platform", subsystem.getPath());
             }
             // What MangoHud names a GPU's driver by; msm_drm is how an Adreno's render node reads
-            // on a mainline kernel, and the driver it reads the load of (bindAdrenoStats).
+            // on a mainline kernel, and the driver it reads the load of (bindAdrenoStats); panfrost
+            // is a Mali's.
             File driver = new File(device, "driver");
+            String driverTarget = "/sys/bus/platform/drivers/" + (mali ? "panfrost" : "msm_drm");
+            if (Files.isSymbolicLink(driver.toPath()) && !driverTarget.equals(Files.readSymbolicLink(driver.toPath()).toString())) {
+                Files.delete(driver.toPath());
+            }
             if (!Files.isSymbolicLink(driver.toPath())) {
-                Os.symlink("/sys/bus/platform/drivers/msm_drm", driver.getPath());
+                Os.symlink(driverTarget, driver.getPath());
             }
         } catch (IOException | ErrnoException e) {
             return;
         }
         bind(cmd, new File(base, "sys").getPath() + ":/sys/dev/char");
         bind(cmd, dri.getPath() + ":/dev/dri");
-        bind(cmd, KGSL_DEVICE + ":/dev/dri/" + node);
+        bind(cmd, gpuDevice + ":/dev/dri/" + node);
         bindDrmClass(base, cmd, node, major + ":" + minor);
     }
 
@@ -355,12 +373,30 @@ public final class LinuxRuntime {
     /** The file the GPU's temperature reads from, or null where the app may read none. */
     public static String gpuTempSource() {
         String kgsl = "/sys/class/kgsl/kgsl-3d0/";
+        // MediaTek names its GPU sensor "mtk-gpu" or "gpu0"; thermalZone matches either by "gpu".
         return firstReadable(kgsl + "temp", kgsl + "devfreq/temp", thermalZone("gpu"));
     }
 
     private static String gpuLoadSource() {
         String kgsl = "/sys/class/kgsl/kgsl-3d0/";
         return firstReadable(kgsl + "gpu_busy_percentage", kgsl + "devfreq/gpu_load");
+    }
+
+    /**
+     * The GPU clock in Hz: KGSL's on an Adreno; on a Mali its devfreq node, which the kernel
+     * names after the GPU's address ("13000000.mali"), so it is found by listing.
+     */
+    private static String gpuClockSource() {
+        String kgsl = "/sys/class/kgsl/kgsl-3d0/";
+        String adreno = firstReadable(kgsl + "devfreq/cur_freq", kgsl + "gpuclk");
+        if (adreno != null) return adreno;
+        File[] devfreq = new File("/sys/class/devfreq").listFiles((dir, n) -> n.contains("mali") || n.contains("gpu"));
+        if (devfreq == null) return null;
+        for (File d : devfreq) {
+            String path = firstReadable(new File(d, "cur_freq").getPath());
+            if (path != null) return path;
+        }
+        return null;
     }
 
     /**
@@ -374,7 +410,7 @@ public final class LinuxRuntime {
         String gpuTemp = gpuTempSource();
         String[][] stats = {
                 {gpuLoadSource(), "/sys/kernel/debug/dri/0/perf_now"},
-                {firstReadable(kgsl + "devfreq/cur_freq", kgsl + "gpuclk"),
+                {gpuClockSource(),
                         "/sys/devices/platform/soc@0/3d00000.gpu/devfreq/3d00000.gpu/cur_freq"},
                 {gpuTemp, "/sys/class/thermal/thermal_zone28/temp"},
                 {gpuTemp, "/sys/class/thermal/thermal_zone26/temp"},

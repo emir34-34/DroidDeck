@@ -61,6 +61,8 @@ static int g_swap_extra;
  * the frame-generation ring): a blit converts every client format into it, the chains read RGBA. */
 #define SCENE_FMT VK_FORMAT_R8G8B8A8_UNORM
 static VkPhysicalDeviceMemoryProperties g_memprops;
+/* The driver has dma-buf import with explicit modifiers (always on Turnip; a system Mali driver may not). */
+static int g_has_drm_modifiers;
 
 static VkSurfaceKHR g_surface;
 static VkSwapchainKHR g_swapchain;
@@ -450,18 +452,27 @@ static int dev_init(void) {
     }
     g_vk.GetPhysicalDeviceMemoryProperties(g_pd, &g_memprops);
 
-    /* Verify the dmabuf-import extensions are present, and log any that are missing. */
-    const char *dev_exts[7] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, "VK_KHR_external_memory_fd",
-                               "VK_EXT_external_memory_dma_buf", "VK_EXT_image_drm_format_modifier",
-                               "VK_KHR_image_format_list", NULL, NULL};
-    uint32_t n_dev_exts = 5;
+    /* Verify the dmabuf-import extensions are present, and log any that are missing. Only the
+     * swapchain is required: Turnip has them all, but a system driver (a Mali's, on MediaTek) may
+     * lack one, and asking for an extension the driver does not have fails vkCreateDevice outright
+     * - no session at all - where leaving it out only costs the zero-copy path (clients fall back
+     * to wl_shm). */
+    static const char *const dmabuf_exts[] = {"VK_KHR_external_memory_fd", "VK_EXT_external_memory_dma_buf",
+                                              "VK_EXT_image_drm_format_modifier", "VK_KHR_image_format_list"};
+    const char *dev_exts[7] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    uint32_t n_dev_exts = 1;
     uint32_t ne = 0;
     g_vk.EnumerateDeviceExtensionProperties(g_pd, NULL, &ne, NULL);
     VkExtensionProperties *exts = calloc(ne ? ne : 1, sizeof(*exts));
     g_vk.EnumerateDeviceExtensionProperties(g_pd, NULL, &ne, exts);
-    for (unsigned i = 0; i < 5; i++)
-        if (!has_ext(exts, ne, dev_exts[i]))
-            LOGE("present: driver MISSING %s (dmabuf import will fail)", dev_exts[i]);
+    if (!has_ext(exts, ne, VK_KHR_SWAPCHAIN_EXTENSION_NAME))
+        LOGE("present: driver MISSING %s", VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    for (unsigned i = 0; i < sizeof(dmabuf_exts) / sizeof(*dmabuf_exts); i++) {
+        if (has_ext(exts, ne, dmabuf_exts[i])) dev_exts[n_dev_exts++] = dmabuf_exts[i];
+        else LOGE("present: driver MISSING %s (dmabuf import will fail)", dmabuf_exts[i]);
+    }
+    g_has_drm_modifiers = has_ext(exts, ne, "VK_EXT_image_drm_format_modifier") &&
+                          has_ext(exts, ne, "VK_EXT_external_memory_dma_buf");
     /* HDR sessions only: the HDR10 swapchain (frame generation) can carry the game's metadata. */
     int want_hdr_md = 0;
     if (banner_color_requested()) {
@@ -900,6 +911,7 @@ static int modifier_importable(VkFormat fmt, uint64_t modifier, VkImageUsageFlag
 
 int vkp_dmabuf_modifiers(uint32_t drm_format, uint64_t *out, int max) {
     if (max <= 0 || dev_init() != 0 || !g_vk.GetPhysicalDeviceFormatProperties2) return 0;
+    if (!g_has_drm_modifiers) return 0; /* the device was made without the import extensions */
     VkFormat fmt = drm_to_vk(drm_format);
     VkDrmFormatModifierPropertiesListEXT list = {
         .sType = VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT};
@@ -941,7 +953,7 @@ int vkp_image_is_dmabuf(const struct vkp_image *img) { return img && img->dmabuf
 struct vkp_image *vkp_image_import_dmabuf(int fd, uint32_t drm_format, uint64_t modifier, int w, int h,
                                           uint32_t stride, uint32_t offset, int as_blit_dst) {
     if (modifier == MOD_INVALID || w <= 0 || h <= 0) return NULL;
-    if (dev_init() != 0) return NULL;
+    if (dev_init() != 0 || !g_has_drm_modifiers) return NULL;
 
     struct vkp_image *img = calloc(1, sizeof(*img));
     if (!img) return NULL;

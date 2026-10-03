@@ -689,9 +689,11 @@ class MainActivity : ComponentActivity() {
                     onDismiss = { showRoms = false },
                 )
                 showNonAdreno?.let { release ->
+                    val mali = com.droiddeck.launcher.core.DeviceSupport.mali()
                     ConfirmDialog(
-                        title = "Not an Adreno GPU",
-                        text = "Turnip supports Adreno GPUs. On ${com.droiddeck.launcher.core.DeviceSupport.gpuName()}, Steam may show a black screen. Download: ${"%.0f".format(release.size / 1e6)} MB.",
+                        title = if (mali) "Mali GPU: experimental" else "Not an Adreno GPU",
+                        text = if (mali) "Mali support (MediaTek) is experimental. The screen is drawn with the system's Mali driver, but the runtime needs a glibc Mali Vulkan driver (PanVK for kbase) imported under GPU drivers > Linux runtime driver; without one Steam shows a black screen. Download: ${"%.0f".format(release.size / 1e6)} MB."
+                            else "Turnip supports Adreno GPUs. On ${com.droiddeck.launcher.core.DeviceSupport.gpuName()}, Steam may show a black screen. Download: ${"%.0f".format(release.size / 1e6)} MB.",
                         confirm = "Install anyway",
                         onConfirm = { showNonAdreno = null; install(release) },
                         onDismiss = { showNonAdreno = null },
@@ -1388,9 +1390,10 @@ class MainActivity : ComponentActivity() {
             Thread({ checkCatalog() }, "catalog").start()
             return
         }
-        // The runtime draws with Turnip, an Adreno driver: on Mali, Xclipse or PowerVR the
-        // compositor gets no usable Vulkan device and a session is sound over a black screen.
-        // Said before the download, not after it; the user may still go ahead.
+        // The runtime draws with Turnip, an Adreno driver: on Xclipse or PowerVR the compositor
+        // gets no usable Vulkan device and a session is sound over a black screen; on a Mali it
+        // needs an imported driver first. Said before the download, not after it; the user may
+        // still go ahead.
         if (installed == null && !com.droiddeck.launcher.core.DeviceSupport.adreno()) { showNonAdreno = release; return }
         install(release)
     }

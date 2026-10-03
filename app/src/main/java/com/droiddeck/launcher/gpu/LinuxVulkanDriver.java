@@ -32,7 +32,8 @@ public final class LinuxVulkanDriver {
 
     public static final String HELP_TEXT =
             "The driver the Steam client, the games it launches and the desktop's programs render on, "
-            + "inside the Linux runtime. Imported \"-Linux\" Turnip zips only: these are Linux processes "
+            + "inside the Linux runtime. Imported glibc drivers only - a \"-Linux\" Turnip zip, or on a Mali "
+            + "(MediaTek) GPU a glibc PanVK build for kbase (libvulkan_panfrost.so): these are Linux processes "
             + "and cannot load an Android or Wayland driver. Frames still reach the screen through the "
             + "display driver below. Takes effect at the next session start.";
 
@@ -63,6 +64,12 @@ public final class LinuxVulkanDriver {
      * An id whose import is gone resolves to null rather than failing the launch.
      */
     public static String resolveIcdPath(Context context, String value) {
+        if ((value == null || value.isEmpty()) && com.droiddeck.launcher.core.DeviceSupport.mali()) {
+            // The runtime's own driver is Turnip, which finds no Adreno here: the session would
+            // run on nothing (or on llvmpipe). Said in the log a bug report carries.
+            Log.w(TAG, "Mali GPU with the runtime's Turnip: import a glibc Mali driver (PanVK for kbase) "
+                    + "under \"Linux runtime driver\", or the session has no GPU to draw on");
+        }
         if (value == null || value.isEmpty()) return null;
         LinuxVulkanDriverManager m = new LinuxVulkanDriverManager(context);
         String icd = m.getIcdPath(value);

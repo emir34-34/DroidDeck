@@ -23,8 +23,9 @@ import java.util.zip.ZipInputStream;
 
 /**
  * Imported LINUX Vulkan drivers: glibc Turnip ICDs ({@code Turnip-<tag>[-variant]-Linux.zip} from
- * Banners-Turnip) for the runtime - the gamescope session that runs Valve's native ARM64 Steam
- * client, and the labwc desktop beside it. This is the driver that DRAWS there: the client's own UI
+ * Banners-Turnip), or on a Mali (MediaTek) GPU a glibc Mesa build for it - PanVK on the kbase
+ * kernel interface, {@code libvulkan_panfrost.so} - for the runtime: the gamescope session that
+ * runs Valve's native ARM64 Steam client, and the labwc desktop beside it. This is the driver that DRAWS there: the client's own UI
  * (OpenGL through the runtime's Zink), every game the client launches (D3D through Proton's
  * DXVK/VKD3D) and everything on the desktop. Putting the frame on the screen stays the Android
  * driver's job, in the app's compositor ({@link TurnipDriver}).
@@ -36,7 +37,8 @@ import java.util.zip.ZipInputStream;
  * <p>Layout (under the app's files dir, which the session sees by its full host path):
  * <pre>
  *   files/linux_vulkan_drivers/&lt;id&gt;/
- *       libvulkan_freedreno.so   the driver
+ *       libvulkan_freedreno.so   the driver (libvulkan_panfrost.so and the like for a non-Adreno
+ *                                one: meta.json's libraryName says which; absent means this name)
  *       icd.json                 generated Vulkan ICD manifest; library_path = the .so's ABSOLUTE path
  *       meta.json                name / driverVersion / minGlibc, our own schema
  * </pre>
@@ -69,7 +71,23 @@ public class LinuxVulkanDriverManager {
     public boolean isInstalled(String id) {
         if (id == null || id.isEmpty() || id.contains("/") || id.contains("..")) return false;
         File dir = getDriverDir(id);
-        return new File(dir, LIB_NAME).isFile() && new File(dir, ICD_NAME).isFile();
+        return new File(dir, getLibraryName(id)).isFile() && new File(dir, ICD_NAME).isFile();
+    }
+
+    /** The driver's file name in its folder: meta.json's libraryName, or Turnip's for older imports. */
+    public String getLibraryName(String id) {
+        JSONObject m = readMeta(id);
+        String name = m != null ? m.optString("libraryName", "") : "";
+        return isDriverLibraryName(name) ? name : LIB_NAME;
+    }
+
+    /**
+     * A Vulkan ICD's file name as Mesa builds them: libvulkan_freedreno.so (Turnip),
+     * libvulkan_panfrost.so (PanVK, Mali), libvulkan_lvp.so ... - never a path, never the loader
+     * itself (libvulkan.so).
+     */
+    static boolean isDriverLibraryName(String name) {
+        return name != null && name.matches("libvulkan_[A-Za-z0-9_]+\\.so");
     }
 
     /** Absolute path of the driver's ICD manifest, or null when the id isn't installed. */
@@ -140,8 +158,8 @@ public class LinuxVulkanDriverManager {
                     // Flatten: only the base name matters, and it also defeats zip-slip paths.
                     String base = new File(entry.getName()).getName();
                     if (base.isEmpty()) continue;
-                    if (base.startsWith("libvulkan_freedreno") && base.endsWith(".so")) {
-                        if (soName != null) Log.w(TAG, "zip has several libvulkan_freedreno*.so; using the first (" + soName + ")");
+                    if (base.startsWith("libvulkan_") && base.endsWith(".so")) {
+                        if (soName != null) Log.w(TAG, "zip has several libvulkan_*.so; using the first (" + soName + ")");
                         else {
                             Files.copy(zis, new File(tmpDir, LIB_NAME).toPath(), StandardCopyOption.REPLACE_EXISTING);
                             soName = base;
@@ -181,7 +199,7 @@ public class LinuxVulkanDriverManager {
     String adopt(File tmpDir, String soName, JSONObject zipMeta, String displayName) throws IOException {
         try {
             if (soName == null) {
-                throw new IllegalArgumentException("No libvulkan_freedreno*.so in this zip. An Android "
+                throw new IllegalArgumentException("No libvulkan_*.so in this zip. An Android "
                         + "(AdrenoTools) or -Wayland Turnip zip is not a Linux runtime driver.");
             }
             File so = new File(tmpDir, LIB_NAME);
@@ -195,6 +213,14 @@ public class LinuxVulkanDriverManager {
                 throw new IllegalArgumentException(soName + " is not a glibc driver - it links Android's libc. "
                         + "The Linux runtime needs a \"-Linux\" zip; a plain or \"-Wayland\" Turnip cannot be "
                         + "loaded by the Steam client at all.");
+            }
+            // The staged copy is always LIB_NAME; a driver that is not Turnip keeps its own name, so
+            // the folder (and a session log naming the library) says what it is.
+            String libraryName = isDriverLibraryName(soName) ? soName : LIB_NAME;
+            if (!libraryName.equals(LIB_NAME)) {
+                File named = new File(tmpDir, libraryName);
+                if (!so.renameTo(named)) throw new IOException("cannot rename " + so + " to " + libraryName);
+                so = named;
             }
             String kind = zipMeta != null ? zipMeta.optString("kind", "") : "";
             if (!kind.isEmpty() && !"linux-vulkan-icd".equals(kind)) {
@@ -216,7 +242,7 @@ public class LinuxVulkanDriverManager {
             JSONObject icd = new JSONObject();
             icd.put("file_format_version", "1.0.0");
             JSONObject icdBody = new JSONObject();
-            icdBody.put("library_path", new File(dir, LIB_NAME).getAbsolutePath());
+            icdBody.put("library_path", new File(dir, libraryName).getAbsolutePath());
             icdBody.put("api_version", "1.1.274");
             icd.put("ICD", icdBody);
             if (!FileUtils.writeString(new File(tmpDir, ICD_NAME), icd.toString(2))) throw new IOException("cannot write icd.json");
@@ -229,6 +255,7 @@ public class LinuxVulkanDriverManager {
             meta.put("libc", "glibc");
             meta.put("minGlibc", minGlibc);
             meta.put("sourceLibraryName", soName);
+            meta.put("libraryName", libraryName);
             meta.put("importedAt", System.currentTimeMillis());
             if (!FileUtils.writeString(new File(tmpDir, META_NAME), meta.toString(2))) throw new IOException("cannot write meta.json");
 

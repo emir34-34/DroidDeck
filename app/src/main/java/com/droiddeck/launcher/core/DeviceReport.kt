@@ -102,7 +102,15 @@ object DeviceReport {
         h("GPU")
         k("KGSL gpu_model", readSys("/sys/class/kgsl/kgsl-3d0/gpu_model"))
         k("KGSL chip id", readSys("/sys/class/kgsl/kgsl-3d0/gpu_chipid"))
-        k("System Vulkan ICD", if (File("/vendor/lib64/hw/vulkan.adreno.so").exists()) "/vendor/lib64/hw/vulkan.adreno.so" else "not at the usual path")
+        k("System Vulkan ICD", listOf("/vendor/lib64/hw/vulkan.adreno.so", "/vendor/lib64/hw/vulkan.mali.so")
+            .firstOrNull { File(it).exists() }
+            ?: File("/vendor/lib64/hw").list()?.firstOrNull { it.startsWith("vulkan.") }?.let { "/vendor/lib64/hw/$it" }
+            ?: "not at the usual path")
+        if (DeviceSupport.mali()) {
+            k("Mali kbase node", if (File(DeviceSupport.MALI_DEVICE).exists()) DeviceSupport.MALI_DEVICE else "absent")
+            k("Mali gpuinfo", readSys("/sys/class/misc/mali0/device/gpuinfo"))
+            k("MediaTek SoC", DeviceSupport.mediatek())
+        }
 
         h("Display")
         k("Session output", SessionState.outputSize?.let { "${it.first}x${it.second}" })

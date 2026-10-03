@@ -76,7 +76,8 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
             DriverRow(id, it.label, "Android + Linux: sets the ${if (linux) "display" else "runtime"} driver with it", true, DriverRow.BUNDLE)
         }
         linuxRows = LinuxVulkanDriver.optionValues(activity).map { id ->
-            if (id.isEmpty()) DriverRow("", "Runtime default", "the Turnip built into the runtime", false)
+            if (id.isEmpty()) DriverRow("", "Runtime default",
+                if (gpu.family == GpuInfo.Family.MALI) "the runtime's Turnip: draws nothing on Mali, import a Mali driver" else "the Turnip built into the runtime", false)
             else bundleRow(id, linux = true) ?: DriverRow(
                 id, lm.getDriverName(id),
                 listOfNotNull(
@@ -93,7 +94,7 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
         androidRows = buildList {
             add(DriverRow(
                 TurnipDriver.AUTO, "Auto - picked by GPU",
-                if (auto == "system") "system Vulkan: no bundled build for this GPU" else "${td.displayName(auto)} (bundled)",
+                if (auto == "system") (if (gpu.family == GpuInfo.Family.MALI) "system Vulkan: the Mali driver" else "system Vulkan: no bundled build for this GPU") else "${td.displayName(auto)} (bundled)",
                 false,
             ))
             for (id in td.visibleBundled()) add(DriverRow(id, td.displayName(id), td.driverVersion(id), true, DriverRow.BUNDLED))
