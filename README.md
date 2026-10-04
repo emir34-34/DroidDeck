@@ -13,7 +13,7 @@
 > - **Works:** the Steam client in Big Picture, on PanVK (Mali Vulkan for Android's kbase kernel driver, [wonderkast02/panvk-g720-kbase-csf](https://github.com/wonderkast02/panvk-g720-kbase-csf)).
 > - **Not yet: games.** This Mali-G720 has no BC (DXT) texture compression in hardware, and DXVK refuses a GPU without it. So D3D10/11 games do not start on DXVK. With WineD3D, My Summer Car reaches its splash screen and then crashes while loading the menu. Details: [MediaTek support](docs/development/mediatek.md).
 >
-> The official DroidDeck does not support Mali, so please do not send Mali problems to its Discord or issue tracker.
+> **Reports:** open an [issue on this fork](https://github.com/emir34-34/DroidDeck/issues) with your phone model, Android/ROM (for example HyperOS or an AOSP ROM), and the session folder from `Download/DroidDeck/` as a zip. The official DroidDeck does not support Mali, so please do not send Mali problems to its Discord or issue tracker.
 
 DroidDeck brings the SteamOS experience to Android: Valve's Steam client in Big Picture on your Adreno handheld, with Windows games through Valve's ARM64 Proton.
 
