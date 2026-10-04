@@ -4,6 +4,17 @@ Experimental Arm Mali (MediaTek) support on top of DroidDeck 0.3.0. APKs and the
 published on the fork's [releases](https://github.com/emir34-34/DroidDeck/releases). Newest first.
 Details and known gaps: [docs/development/mediatek.md](../development/mediatek.md).
 
+## 2026-10-04 · PanVK kbase glibc r6 (APK unchanged, `91516fa`)
+
+- **Fixes Steam's interface freezing on the first touches, and its memory blowing up to 3 GB.** The
+  driver called a helper command stream through an address cut to 32 bits. On Android's Mali kernel
+  driver GPU addresses are high, so the GPU jumped to an invalid address (a translation fault at
+  `0xfffef000`) and every queue stopped. One-line fix in `tools/panvk/patches/0002`.
+- **Removes r5's patches 0002 and 0003.** They were built on a wrong diagnosis (a queue deadlock)
+  and only changed timing.
+- Tested on a POCO X8 Pro (Mali-G720): 120 scroll/tap/back gestures in Big Picture over ~5 minutes,
+  with no GPU fault and the interface process at 0.45-0.7 GB.
+
 ## 2026-10-04 · APK `91516fa`
 
 - **GPU drivers page on a Mali:** the Auto/Manual pair cards and the "No drivers listed yet" list

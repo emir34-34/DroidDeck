@@ -1,0 +1,13 @@
+diff --git a/src/panfrost/vulkan/csf/panvk_vX_cmd_draw.c b/src/panfrost/vulkan/csf/panvk_vX_cmd_draw.c
+index 74490ef..c7248df 100644
+--- a/src/panfrost/vulkan/csf/panvk_vX_cmd_draw.c
++++ b/src/panfrost/vulkan/csf/panvk_vX_cmd_draw.c
+@@ -2446,7 +2446,7 @@ get_fb_descs(struct panvk_cmd_buffer *cmdbuf)
+          uint32_t fn_idx = calc_fn_set_fbds_provoking_vertex_idx(cmdbuf);
+          uint32_t fn_stride =
+             dev->draw_ctx->fn_set_fbds_provoking_vertex_stride;
+-         uint32_t fn_addr =
++         uint64_t fn_addr =
+             dev->draw_ctx->fns_bo->addr.dev + fn_idx * fn_stride;
+          cs_move64_to(b, addr_reg, fn_addr);
+          cs_move32_to(b, length_reg, fn_stride);

@@ -56,18 +56,19 @@ selected. It targets Valhall CSF GPUs: Mali-G610/G615/G710/G715/G720. Upstream n
 
 ## Known gaps
 
-- **Fixed in `tools/panvk/patches` (0002, 0003): the Steam client's interface hung and ballooned.**
-  CEF on ANGLE on GL on Zink records hundreds of render passes per command buffer. On kbase the
-  tiler heap is not recycled inside a heap generation, so the vertex/tiler subqueue running ~70
-  passes ahead of the fragment subqueue ran the heap out mid-pass, and the fragment subqueue could
-  not catch up (the pass signals it waits on are deferred on iterator scoreboards shared with the
-  stuck pass): a deadlock, after which Zink could not recycle buffers and grew to gigabytes until
-  lmkd killed it. 0003 makes the VT subqueue wait, at the end of each pass, for the fragment job of
-  the pass `PANVK_KBASE_VT_LEAD` (default 8) passes back. 0002 signals the compute barrier, events
-  and query availability with the command buffer's sync scope (SYSTEM on kbase, where each subqueue
-  is its own CSG). With both, Big Picture scrolled for minutes with no queue timeout and the CEF
-  GPU process steady at ~0.5 GB. `PANVK_KBASE_PROGRESS=1` turns on the hang breadcrumbs alone
-  (`pass << 16 | step` per subqueue in the timeout dump) without the rest of `kbase_diag`.
+- **Fixed in `tools/panvk/patches/0002`: the Steam client's interface froze, then ballooned.**
+  The root cause was a GPU fault, not a queue deadlock: `get_fb_descs()` stored the address of the
+  provoking-vertex helper stream in a `uint32_t` before `CALL`ing it. kbase's SAME_VA addresses
+  are high (`0x5f_fffef000`), so the command stream frontend prefetched from `0x00000000fffef000`
+  (`TRANSLATION_FAULT`, "Command Stream Frontend, pref0" in dmesg; `CSF group N fatal error ...
+  exception 0xc1` in the client log) and every group stopped. Queue timeouts, `DEVICE LOST` and the
+  multi-GB growth (Zink unable to recycle anything) all followed from that. The path only runs
+  when a render pass starts before the provoking-vertex mode is known, which Chromium on Zink does
+  and vkcube does not. With the one-line fix, Big Picture took 120 scroll/tap/back gestures over
+  ~5 minutes with no fault, no timeout and CEF's GPU process at 0.45-0.7 GB.
+  Earlier patches (cross-subqueue sync scope, a VT-lead throttle) were built on a wrong diagnosis
+  and are gone. The fault was in every hang log from the start but only grepping for "fatal error"
+  showed it.
 - No glibc Mali driver ships with the app or the runtime, and none is offered by the release
   checker; it has to be built with the script above and imported.
 - Whether the system Mali driver exposes `VK_EXT_image_drm_format_modifier` depends on the DDK

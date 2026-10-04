@@ -70,3 +70,20 @@ per pass, since barriers also advance the fragment sync point). Separately, the 
 event set/reset and query availability syncs were switched from `MALI_CS_SYNC_SCOPE_CSG` to the
 command buffer's scope (SYSTEM on kbase), since each subqueue is its own CSG. Patches:
 `tools/panvk/patches/0002-*` and `0003-*` in the DroidDeck fork.
+
+## Correction: the real cause (2026-10-04)
+
+The follow-up above was wrong. Every hang log also has `kbase: CSF group N fatal error: status
+0x7d0002c1 (exception 0xc1), sideband 0xfffef000`, and dmesg shows `Unhandled Page fault ... at VA
+0x00000000FFFEF000, TRANSLATION_FAULT, READ, source Command Stream Frontend, pref0`. The CS
+prefetcher jumped to a truncated address: in `get_fb_descs()`
+
+```c
+uint32_t fn_addr = dev->draw_ctx->fns_bo->addr.dev + fn_idx * fn_stride;
+cs_move64_to(b, addr_reg, fn_addr);
+...
+cs_call(b, addr_reg, length_reg);
+```
+
+`fns_bo` sits at `0x5f_fffef000` on kbase (SAME_VA), so the upper 32 bits are lost. Making
+`fn_addr` a `uint64_t` fixes it; the earlier "fixes" only moved timing around and were dropped.
