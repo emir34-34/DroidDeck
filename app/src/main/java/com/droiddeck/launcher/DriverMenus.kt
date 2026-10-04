@@ -59,6 +59,7 @@ internal class DriverMenus(private val activity: Activity, private val ui: Handl
     fun state() = GpuDriversState(
         gpuName = gpu.name, gpuFamily = gpu.family.label, soc = gpu.soc, supportText = gpu.supportText,
         supported = gpu.support == GpuInfo.Support.TESTED, unsupported = gpu.support == GpuInfo.Support.UNSUPPORTED,
+        mali = gpu.family == GpuInfo.Family.MALI,
         auto = mode == SessionPrefs.GPU_DRIVERS_AUTO, pairs = pairRows, busy = pairBusy, percent = pairPercent,
         autoStatus = autoStatus, releaseStatus = releaseStatus, checking = releaseChecking,
         linuxRows = linuxRows, linuxSelected = linuxSelected, androidRows = androidRows, androidSelected = androidSelected,

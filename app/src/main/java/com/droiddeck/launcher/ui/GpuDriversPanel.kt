@@ -68,6 +68,8 @@ class GpuDriversState(
     val supportText: String = "",
     val supported: Boolean = true,
     val unsupported: Boolean = false,
+    /** A Mali: no Turnip pair fits it, its runtime driver is picked under Advanced. */
+    val mali: Boolean = false,
     val auto: Boolean = true,
     val pairs: List<PairRow> = emptyList(),
     /** The pair key being installed, and how far along (-1 = unknown). */
@@ -120,7 +122,11 @@ internal fun GpuDriversPanel(s: GpuDriversState, a: GpuDriversActions, onAdvance
     var showAll by rememberSaveable { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
         DeviceCard(s)
-        if (!s.unsupported) {
+        if (s.mali) Text(
+            stringResource(R.string.gpu_mali_hint),
+            fontSize = 13.sp, color = colors.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp),
+        )
+        else if (!s.unsupported) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ModeCard(Icons.Outlined.AutoAwesome, stringResource(R.string.common_auto), stringResource(R.string.gpu_auto_hint), s.auto, Modifier.weight(1f)) { a.onAuto(true) }
                 ModeCard(Icons.Outlined.Tune, stringResource(R.string.mode_suspend_manual), stringResource(R.string.gpu_manual_hint), !s.auto, Modifier.weight(1f)) { a.onAuto(false) }

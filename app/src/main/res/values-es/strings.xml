@@ -454,6 +454,7 @@
     <string name="setup_all_set">● Todo listo</string>
     <string name="setup_n_ready">%1$d de %2$d listos</string>
     <string name="setup_system_check">Comprobación del sistema</string>
+    <string name="gpu_mali_hint">GPU Mali: los pares de controladores son para Adreno y no se aplican aquí. En Avanzado, elige como controlador de runtime el PanVK (kbase) importado y deja el controlador de pantalla en Auto, que usa el controlador Mali del propio teléfono.</string>
     <string name="setup_gpu_supported">Dispositivo compatible</string>
     <string name="setup_gpu_untested">GPU sin probar</string>
     <string name="setup_gpu_unsupported">GPU no compatible</string>
