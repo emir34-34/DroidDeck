@@ -4,6 +4,10 @@ Experimental Arm Mali (MediaTek) support on top of DroidDeck 0.3.0. APKs and the
 published on the fork's [releases](https://github.com/emir34-34/DroidDeck/releases). Newest first.
 Details and known gaps: [docs/development/mediatek.md](../development/mediatek.md).
 
+**Current state:** the Steam client works. Games do not run yet. DXVK (D3D10/11) refuses this
+Mali-G720 because it has no BC texture compression in hardware. With WineD3D, My Summer Car reaches
+its splash screen and crashes while loading the menu.
+
 ## 2026-10-04 · PanVK kbase glibc r6 (APK unchanged, `91516fa`)
 
 - **Fixes Steam's interface freezing on the first touches, and its memory blowing up to 3 GB.** The

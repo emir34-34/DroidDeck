@@ -1,6 +1,8 @@
 # MediaTek (Arm Mali) support
 
-Status: **experimental, not validated on hardware.** Adreno remains the only tested GPU family.
+Status: **experimental.** Tested on one device (POCO X8 Pro, Mali-G720 MC8): the Steam client
+works and games do not run yet (see [Known gaps](#known-gaps)). Adreno remains the main supported
+GPU family.
 
 A DroidDeck session uses two Vulkan drivers (see `gpu/TurnipDriver.java` and
 `gpu/LinuxVulkanDriver.java`):
@@ -69,6 +71,21 @@ selected. It targets Valhall CSF GPUs: Mali-G610/G615/G710/G715/G720. Upstream n
   Earlier patches (cross-subqueue sync scope, a VT-lead throttle) were built on a wrong diagnosis
   and are gone. The fault was in every hang log from the start but only grepping for "fatal error"
   showed it.
+- **Games do not run yet** (tested with My Summer Car, a Unity 5 game, on 2026-10-04):
+  - **DXVK refuses the GPU.** In DXVK 3.1's log: `Skipping: Device does not support required
+    feature 'multiViewport'`. With that feature exposed, the next one is `textureCompressionBC`.
+    The phone's own Mali driver also reports `textureCompressionBC = 0`, so on this MT6899 BC/DXT
+    is not available in hardware. PanVK also lacks `shaderClipDistance`/`shaderCullDistance`,
+    which DXVK requires. DXVK has no fallback for any of these. The game then crashes inside
+    `dxgi.dll` with "No adapters found". The way forward is BC emulation in PanVK (decoding to
+    RGBA8 on upload, as the wrappers used by GameNative do). An unfinished patch that exposes
+    the other three features is not in the build.
+  - **WineD3D (`PROTON_USE_WINED3D=1`, GL on Zink on PanVK) gets further.** The Unity launcher
+    dialog and the splash screen draw correctly, and the splash waits for a key or tap. While
+    the menu loads in D3D11 mode, the game dies right after a stream-output (transform feedback)
+    shader is compiled: once a kernel OOM kill, once a segfault in `glClientWaitSync`.
+    `-force-d3d9` loads `d3d9.dll`; what happens after the splash in that mode is still
+    untested.
 - No glibc Mali driver ships with the app or the runtime, and none is offered by the release
   checker; it has to be built with the script above and imported.
 - Whether the system Mali driver exposes `VK_EXT_image_drm_format_modifier` depends on the DDK
